@@ -34,6 +34,8 @@ uint64 m_PlayerGUID;
 string playerName;
 /* Is Active */
 bool isBattleActive = false;
+bool hasLogged = false;
+bool inZone = true;
 /* Is Bosses Dead */
 int isWaveBossDead = 0;
 
@@ -69,8 +71,6 @@ enum SpellIds
 	SPELL_BERSERKER_CHARGE = 38907,
 	SPELL_MORTAL_STRIKE = 68783,
 	SPELL_DEEP_WOUNDS = 23256,
-	/* First Wave Treat Spells */
-	SPELL_ROOT_AURA = 43956,
 	/* First Wave Elite Spells */
 	/* `- Spore Healer */
 	SPELL_HEAL_REGROWTH = 48443, //heal+H.O.T.
@@ -134,6 +134,10 @@ enum SpellIds
 	//SPELL_DRAGON_FIREBALL_BARRAGE = 37541,
 	/* Others */
 	SPELL_TELEPORT_VISUAL = 64446,
+	/* Disable Class Spells */
+	SPELL_VANISH_1 = 1856,
+	SPELL_VANISH_2 = 1857,
+	SPELL_VANISH_3 = 26889,
 };
 
 enum SpawnIds
@@ -187,6 +191,13 @@ struct DragonMove
 	uint32 gobject;
 	uint32 spellId;
 	float x, y, z, o;
+};
+
+uint32 spellDisables[] = { SPELL_VANISH_1, SPELL_VANISH_2, SPELL_VANISH_3 };
+
+static Position sTeleOut[] = 
+{
+	{ -4286.56f, 1330.970f, 161.21f, 0.019994f }
 };
 
 static DragonMove sMoveData[] =
@@ -323,10 +334,42 @@ void MessageOnWave(Creature * me, uint32 eventId)
 	me->MonsterYell(ss.str().c_str(), LANG_UNIVERSAL, me->GetGUID());
 }
 
+void DoSendCompleteMessage(string who)
+{
+	stringstream ss;
+	ss << who.c_str()
+		<< "has completed the Dire Maul Arena Event!"
+		<< "The event is now opened and ready for another victim!";
+	sWorld->SendGlobalText(ss.str().c_str(), NULL);
+}
+
 void AddEndRewards(Player * player, uint32 honoramount, uint32 tokenId, uint32 tokenAmount)
 {
 	uint32 curHonor = player->GetHonorPoints();
 	player->SetHonorPoints(curHonor + honoramount);
 	ChatHandler(player).PSendSysMessage("Added %u honor!", honoramount);
 	player->AddItem(tokenId, tokenAmount);
+}
+/* End Battle Functions */
+void DoEndBattle(Creature * me)
+{
+	isBattleActive = false;
+	m_PlayerGUID = NULL;
+	playerName = "";
+	me->DespawnOrUnsummon(1);
+}
+
+void DoEndBattle(Creature * me, SummonList summons)
+{
+	isBattleActive = false;
+	m_PlayerGUID = NULL;
+	playerName = "";
+	summons.DespawnAll();
+	me->DespawnOrUnsummon(1);
+}
+/* Increase Health Function ~ Boss Fight Pet */
+void DoIncreaseHealth(Creature * me, float size)
+{
+	me->SetHealth(me->GetMaxHealth()+40000);
+	me->SetFloatValue(OBJECT_FIELD_SCALE_X, size);
 }

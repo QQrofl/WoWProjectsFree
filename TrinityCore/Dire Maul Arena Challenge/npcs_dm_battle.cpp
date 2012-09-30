@@ -20,9 +20,10 @@
 	   *      		Fondled by: Faded	          *
 	    *    Mental Support by: Foereaper        *
 	     *    							        *
-		  *   (C)Nomsoftware 'Nomsoft' 2012    */
+		  *   (C)Nomsoftware 'Nomsoft' 2012    *
+		   *##################################*/
 #include "npcs_dm_battle.h"
-/* Red Blood Guard GUID */
+
 class npc_dire_arena_commander : public CreatureScript
 {
    public:
@@ -50,12 +51,13 @@ class npc_dire_arena_commander : public CreatureScript
 		   switch(actions)
 		   {
 		      case GOSSIP_ACTION_INFO_DEF+1:
-					  m_PlayerGUID = player->GetGUID();
-					  playerName = player->GetName();
-					  isBattleActive = true;
-					  player->CastSpell(player, SPELL_TELEPORT_VISUAL);
-					  player->TeleportTo(1, -3739.533447f, 1095.419434f, 131.969559f, 3.029968f);
-					  player->PlayerTalkClass->SendCloseGossip();
+				  
+				   m_PlayerGUID = player->GetGUID();
+				   playerName = player->GetName();
+				   isBattleActive = true;
+				   player->CastSpell(player, SPELL_TELEPORT_VISUAL);
+				   player->TeleportTo(1, -3739.533447f, 1095.419434f, 131.969559f, 3.029968f);
+				   player->PlayerTalkClass->SendCloseGossip();
 				  break;
 
 		      case GOSSIP_ACTION_INFO_DEF+2:
@@ -74,6 +76,7 @@ class npc_dire_arena_commander : public CreatureScript
 		   npc_dire_arena_commanderAI(Creature * c) : ScriptedAI(c), summons(me) { }
 
 		   uint32 checkBattle;
+		   uint32 checkPlayer;
 		   bool checkIsDead;
 		   bool resetOnce;
 
@@ -85,6 +88,7 @@ class npc_dire_arena_commander : public CreatureScript
 			   checkIsDead = true;
 			   resetOnce = false;
 			   checkBattle = 2000;
+			   checkPlayer = 1000;
 		   }
 
 		   void UpdateAI(const uint32 diff)
@@ -111,6 +115,31 @@ class npc_dire_arena_commander : public CreatureScript
 			   else
 				   checkBattle -= diff;
 
+			   if(checkPlayer <= diff) // Checking battle as well
+			   {
+				   if(m_PlayerGUID == 0)
+					   return;
+
+				   if(hasLogged || !inZone)
+				   {
+						isBattleActive = false;
+						summons.DespawnAll();
+						events.Reset();
+						isWaveBossDead = 0;
+						checkIsDead = true;
+						hasLogged = false;
+						inZone = true;
+						resetOnce = false;
+						player = NULL;
+						m_PlayerGUID = NULL;
+						playerName = "";
+						sWorld->SendGlobalText("A challenger has been scared off and left the Dire Maul Arena Challenge! Who's next?", NULL);
+				   }
+					checkPlayer = 1000;
+			   }
+			   else
+				   checkPlayer -= diff;
+
 			   if (isWaveBossDead == 1 && checkIsDead)
 			   {
 				   events.ScheduleEvent(EVENT_CHECK_WAVES, 1000);
@@ -119,7 +148,6 @@ class npc_dire_arena_commander : public CreatureScript
 			   else if (isWaveBossDead == 2 && !checkIsDead)
 			   {
 				   events.ScheduleEvent(EVENT_CHECK_WAVES, 1000);
-				   player->RemoveAura(SPELL_ROOT_AURA);
 				   checkIsDead = true;
 			   }
 			   else if (isWaveBossDead == 3 && checkIsDead)
@@ -167,6 +195,15 @@ class npc_dire_arena_commander : public CreatureScript
 						  {
 							  if(!player)
 								  return;
+
+							  if(!isBattleActive)
+							  {
+								  summons.DespawnAll();
+								  checkIsDead = true;
+								  resetOnce = false;
+								  return;
+							  }
+
 							  int itemCount = player->GetItemCount(ITEM_INTRAVENOUS_HEALING_POTION);
 							  if(itemCount == 0)
 								  player->AddItem(ITEM_INTRAVENOUS_HEALING_POTION, 1);
@@ -241,7 +278,7 @@ class npc_dire_arena_commander : public CreatureScript
 						  }break;
 
 					  case EVENT_FIRST_WAVE:
-						  sLog->outString("[Dire Maul Arena]: Starting First Wave...");
+						  sLog->outInfo(LOG_FILTER_GENERAL, "[Dire Maul Arena]: Starting First Wave...");
 						  MessageOnWave(me, EVENT_FIRST_WAVE);
 						  player->CastSpell(player, SPELL_TELEPORT_VISUAL);
 						  player->TeleportTo(1, -3739.533447f, 1095.419434f, 131.969559f, 3.029968f); // Making sure you're in the right place
@@ -253,10 +290,13 @@ class npc_dire_arena_commander : public CreatureScript
 					  case EVENT_FIRST_WAVE_TREAT:
 						  MessageOnWave(me, EVENT_FIRST_WAVE_TREAT);
 						  me->SummonCreature(waveList[1], -3739.533447f, 1095.419434f, 131.969559f, 3.029968f, TEMPSUMMON_MANUAL_DESPAWN, 0);
+						  me->SummonCreature(NPC_PORTAL, m_WaveSpawns[1].m_positionX, m_WaveSpawns[1].m_positionY, m_WaveSpawns[1].m_positionZ, m_WaveSpawns[1].m_orientation,
+							    TEMPSUMMON_MANUAL_DESPAWN, 0);
+						  me->SummonCreature(NPC_PORTAL, m_WaveSpawns[2].m_positionX, m_WaveSpawns[2].m_positionY, m_WaveSpawns[2].m_positionZ, m_WaveSpawns[2].m_orientation, 
+							    TEMPSUMMON_MANUAL_DESPAWN, 0);
 						  player->CastSpell(player, SPELL_TELEPORT_VISUAL);
 						  player->TeleportTo(1, -3739.533447f, 1095.419434f, 131.969559f, 3.029968f); // Making sure you're in the right place
 						  player->PlayDirectSound(SOUND_HORN_WAVE_START);
-						  player->AddAura(SPELL_ROOT_AURA, player);
 						  break;
 
 					  case EVENT_FIRST_WAVE_ELITE:
@@ -296,7 +336,7 @@ class npc_dire_arena_commander : public CreatureScript
 						  break;
 
 					  case EVENT_FINAL_WAVE_BOSS:
-						  sLog->outString("[Dire Maul Arena]: Starting Final Wave...");
+						  sLog->outInfo(LOG_FILTER_GENERAL, "[Dire Maul Arena]: Starting Final Wave...");
 						  MessageOnWave(me, EVENT_FINAL_WAVE_BOSS);
 						  player->PlayDirectSound(SOUND_HORN_WAVE_START);
 						  player->CastSpell(player, SPELL_TELEPORT_VISUAL);
@@ -308,12 +348,13 @@ class npc_dire_arena_commander : public CreatureScript
 					  case EVENT_COMPLETED_WAVES:
 						  me->MonsterYell("Congratulations to our finest Gladiator that went through a lot to earn our rewards! Who will be our next challenger?", 
 							  LANG_UNIVERSAL, me->GetGUID());
+						  DoSendCompleteMessage(player->GetName());
+						  player->TeleportTo(1, sTeleOut[0].m_positionX, sTeleOut[0].m_positionY, sTeleOut[0].m_positionZ, sTeleOut[0].m_orientation);
 						  isBattleActive = false;
 						  m_PlayerGUID = NULL;
 						  playerName = "";
 						  summons.DespawnAll();
 						  events.Reset();
-						  events.CancelEvent(EVENT_COMPLETED_WAVES);
 						  isWaveBossDead = 0;
 						  checkIsDead = true;
 						  break;
@@ -355,6 +396,7 @@ class npc_dire_maul_rb_guard : public CreatureScript
 		   {
 			   spawnMinis = true;
 			   uiCharge = 2000;
+			   summons.DespawnAll();
 			   uiMortalStrike = urand(5000, 8000);
 			   me->MonsterYell("You can't defeat me!", LANG_UNIVERSAL, me->GetGUID());
 			   me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID, 45233);
@@ -364,11 +406,7 @@ class npc_dire_maul_rb_guard : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me, summons);
 		   }
 
 		   void JustDied(Unit * killer)
@@ -382,7 +420,14 @@ class npc_dire_maul_rb_guard : public CreatureScript
 
 		   void JustSummoned(Creature * summoned)
 		   {
+			   if(!UpdateVictim())
+			   {
+				   summoned->DespawnOrUnsummon(100);
+				   return;
+			   }
 			   summons.Summon(summoned);
+			   summoned->AddThreat(me->getVictim(), 100.0f);
+			   summoned->GetMotionMaster()->MoveChase(me->getVictim(), 100.0f);
 		   }
 
 		   void UpdateAI(const uint32 diff)
@@ -420,23 +465,14 @@ class npc_dire_maul_rb_guard : public CreatureScript
 			   if(me->GetHealthPct() <= 45 && spawnMinis)
 			   {
 				   me->MonsterYell("Minions, come to my aid!", LANG_UNIVERSAL, me->GetGUID());
-				   mini = me->SummonCreature(NPC_RED_BLOOD_GUARD_MINI, me->GetPositionX(), me->GetPositionY()+1, me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 0);
-				   mini->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID, 45233);
-				   mini2 = me->SummonCreature(NPC_RED_BLOOD_GUARD_MINI2, me->GetPositionX()+2, me->GetPositionY()+1, me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 0);
-				   mini2->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID, 45233);
-				   mini3 = me->SummonCreature(NPC_RED_BLOOD_GUARD_MINI3, me->GetPositionX()+2, me->GetPositionY()+1, me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 0);
-				   mini3->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID, 45233);
-				   mini->AddThreat(me->getVictim(), 100.0f);
-				   mini2->AddThreat(me->getVictim(), 100.0f);
-				   mini3->AddThreat(me->getVictim(), 100.0f);
+				   me->SummonCreature(NPC_RED_BLOOD_GUARD_MINI, me->GetPositionX(), me->GetPositionY()+1, me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 0);
+				   me->SummonCreature(NPC_RED_BLOOD_GUARD_MINI2, me->GetPositionX()+2, me->GetPositionY()+1, me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 0);
+				   me->SummonCreature(NPC_RED_BLOOD_GUARD_MINI3, me->GetPositionX()+2, me->GetPositionY()+1, me->GetPositionZ(), me->GetOrientation(), TEMPSUMMON_MANUAL_DESPAWN, 0);
 				   spawnMinis = false;
 			   }
 			   DoMeleeAttackIfReady();
 		   }
 	   private:
-		   Creature * mini;
-		   Creature * mini2;
-		   Creature * mini3;
 		   SummonList summons;
 	   };
 
@@ -453,16 +489,13 @@ class npc_red_blood_mini : public CreatureScript
 
 	   struct npc_red_blood_miniAI : public ScriptedAI
 	   {
-		   npc_red_blood_miniAI(Creature * c) : ScriptedAI(c) { }
+		   npc_red_blood_miniAI(Creature * c) : ScriptedAI(c) { me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID, 45233); }
 
 		   void KilledUnit(Unit * who)
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 	   };
 
@@ -486,11 +519,6 @@ class npc_dm_wave_trigger : public CreatureScript
 
 		   void Reset()
 		   {
-			   me->MonsterTextEmote("A portal has opened..", LANG_UNIVERSAL, me->GetGUID());
-			   me->SummonCreature(NPC_PORTAL, m_WaveSpawns[1].m_positionX, m_WaveSpawns[1].m_positionY, m_WaveSpawns[1].m_positionZ, m_WaveSpawns[1].m_orientation,
-				   TEMPSUMMON_MANUAL_DESPAWN, 0);
-			   me->SummonCreature(NPC_PORTAL, m_WaveSpawns[2].m_positionX, m_WaveSpawns[2].m_positionY, m_WaveSpawns[2].m_positionZ, m_WaveSpawns[2].m_orientation, 
-				   TEMPSUMMON_MANUAL_DESPAWN, 0);
 			   startSpawnWave = 1000;
 			   spawnPhase = 0;
 		   }
@@ -612,6 +640,14 @@ class npc_dm_wave_trigger : public CreatureScript
 		   void JustSummoned(Creature * summoned)
 		   {
 			   summons.Summon(summoned);
+			   if(Player * player = Unit::GetPlayer(*me, m_PlayerGUID))
+			   {
+				   if(!player)
+					   return;
+				   summoned->SetInCombatWith(player);
+				   summoned->AI()->AttackStart(player);
+				   summoned->GetMotionMaster()->MoveChase(player, 500.0f);
+			   }
 		   }
 
 		   void DoPortalSpawns() // Spawns Random Npcs
@@ -692,29 +728,23 @@ class npc_dm_wave_spawns : public CreatureScript
 	   {
 		   npc_dm_wave_spawnsAI(Creature * c) : ScriptedAI(c) { }
 
-
-		   void Reset()
-		   {
-			   me->GetMotionMaster()->MovePoint(-3739.533447f, 1095.419434f, 131.969559f, 3.029968f);
-		   }
-
 		   void KilledUnit(Unit * who)
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 
 		   void UpdateAI(const uint32 diff)
 		   {
-			   if(!UpdateVictim())
-				   return;
-
 			   if(!isBattleActive)
 				   me->DespawnOrUnsummon(1);
+
+			   if(isWaveBossDead == 2)
+				   me->DespawnOrUnsummon(1);
+
+			   if(!UpdateVictim())
+				   return;
 
 			   DoMeleeAttackIfReady();
 		   }
@@ -723,6 +753,31 @@ class npc_dm_wave_spawns : public CreatureScript
 	   CreatureAI * GetAI(Creature * pCreature) const
 	   {
 		   return new npc_dm_wave_spawnsAI(pCreature);
+	   }
+};
+
+class npc_dm_wave_portals : public CreatureScript
+{
+   public:
+	   npc_dm_wave_portals() : CreatureScript("npc_dm_wave_portals") { }
+
+	   struct npc_dm_wave_portalsAI : public ScriptedAI
+	   {
+		   npc_dm_wave_portalsAI(Creature * c) : ScriptedAI(c) { }
+
+		   void UpdateAI(const uint32 diff)
+		   {
+			   if(!isBattleActive)
+				   me->DespawnOrUnsummon(1);
+
+			   if(isWaveBossDead == 2)
+				   me->DespawnOrUnsummon(1);
+		   }
+	   };
+
+	   CreatureAI * GetAI(Creature * pCreature) const
+	   {
+		   return new npc_dm_wave_portalsAI(pCreature);
 	   }
 };
 
@@ -782,11 +837,7 @@ class npc_dm_hank_the_tank : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   summons.DespawnAll();
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me, summons);
 		   }
 
 		   void JustSummoned(Creature * summoned)
@@ -898,6 +949,7 @@ class npc_dm_field_medic : public CreatureScript
 			   int casted = 0;
 			   me->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID+0, 51404);
 			   me->AddAura(SPELL_HEAL_AURA_HOTS, me);
+			   hank = NULL;
 			   hank = me->FindNearestCreature(NPC_HANK_THE_TANK, 50.0f, true);
 		   }
 
@@ -906,7 +958,7 @@ class npc_dm_field_medic : public CreatureScript
 			   if(!hank)
 				   return;
 
-			   if(hank->isDead() && !showOnce)
+			   if(hank && hank->isDead() && !showOnce)
 			   {
 				   me->MonsterYell("Master Dead?!!! I give up!...", LANG_UNIVERSAL, me->GetGUID());
 				   me->setFaction(35);
@@ -915,7 +967,7 @@ class npc_dm_field_medic : public CreatureScript
 				   return;
 			   }
 
-			   if(!hank->isInCombat())
+			   if(hank && !hank->isInCombat())
 				   return;
 
 			   if(hank && hank->GetHealthPct() >= 100)
@@ -992,7 +1044,6 @@ class npc_dm_field_medic : public CreatureScript
 			   }
 			   else
 				   uiLifebloomTimer -= diff;
-			   DoMeleeAttackIfReady();
 		   }
 	   private:
 		   Creature * hank;
@@ -1056,11 +1107,7 @@ class npc_dm_main_rogue : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   summons.DespawnAll();
-			   me->DespawnOrUnsummon(1);			   
+			   DoEndBattle(me, summons);
 		   }
 
 		   void JustSummoned(Creature * summoned)
@@ -1201,10 +1248,7 @@ class npc_dm_rogue_initiate : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 
 		   void UpdateAI(const uint32 diff)
@@ -1329,13 +1373,9 @@ class npc_dm_main_unholy : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   summons.DespawnAll();
+			   DoEndBattle(me, summons);
 			   twin = NULL;
 			   guin = NULL;
-			   me->DespawnOrUnsummon(1);
 		   }
 
 		   void JustDied(Unit * killer)
@@ -1362,22 +1402,24 @@ class npc_dm_main_unholy : public CreatureScript
 
 			   if(uiCinematic <= diff)
 			   {
-				   if(cinematicPassed == 0)
+				   switch(cinematicPassed)
 				   {
-					   me->MonsterSay("Ahh, so this thing wants to fight, huh?", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 1;
-					   uiCinematic = 10000;
-				   }
-				   else if(cinematicPassed == 1)
-				   {
-					   me->MonsterSay("Don't be a fool!", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 2;
-					   uiCinematic = 9000;
-				   }
-				   else if(cinematicPassed == 2)
-				   {
-					   me->MonsterSay("Twin, no! Let him go. We can just watch, for now....", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 3;
+					   case 0:
+						   me->MonsterSay("Ahh, so this thing wants to fight, huh?", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 1;
+						   uiCinematic = 10000;
+						   break;
+
+					   case 1:
+						   me->MonsterSay("Don't be a fool!", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 2;
+						   uiCinematic = 9000;
+						   break;
+
+					   case 2:
+						   me->MonsterSay("Twin, no! Let him go. We can just watch, for now....", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 3;
+						   break;
 				   }
 			   }
 			   else
@@ -1515,38 +1557,37 @@ class npc_dm_unholy_twin : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 
 		   void UpdateAI(const uint32 diff)
 		   {
 			   if(uiCinematic <= diff)
 			   {
-				   if (cinematicPassed == 0)
+				   switch(cinematicPassed)
 				   {
-					   me->MonsterSay("I believe it wants to fight us.", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 1;
-					   uiCinematic = 7000;
-				   }
-				   else if (cinematicPassed == 1)
-				   {
-					   me->MonsterSay("Yes. So it seems.", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 2;
-					   uiCinematic = 6000;
-				   }
-				   else if (cinematicPassed == 2)
-				   {
-					   me->MonsterSay("What? FIGHT?", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 3;
-					   uiCinematic = 3000;
-				   }
-				   else if (cinematicPassed == 3)
-				   {
-					   me->MonsterYell("GUIN! NO!", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 4;
+					   case 0:
+						   me->MonsterSay("I believe it wants to fight us.", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 1;
+						   uiCinematic = 7000;
+						   break;
+
+					   case 1:
+						   me->MonsterSay("Yes. So it seems.", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 2;
+						   uiCinematic = 6000;
+						   break;
+
+					   case 2:
+						   me->MonsterSay("What? FIGHT?", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 3;
+						   uiCinematic = 3000;
+						   break;
+
+					   case 3:
+						   me->MonsterYell("GUIN! NO!", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 4;
+						   break;
 				   }
 			   }
 			   else
@@ -1641,31 +1682,33 @@ class npc_dm_unholy_pet : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 
 		   void UpdateAI(const uint32 diff)
 		   {
 			   if(uiCinematicTimer <= diff)
 			   {
-				   if (cinematicPassed == 0)
+				   switch(cinematicPassed)
 				   {
-					   me->MonsterSay("Why can't we fight masters?", LANG_UNIVERSAL, me->GetGUID());
-					   cinematicPassed = 1;
-					   uiCinematicTimer = 5000;
-				   }
-				   else if (cinematicPassed == 1)
-				   {
-					   me->MonsterYell("Well, I'm hungry!", LANG_UNIVERSAL, me->GetGUID());
-					   me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_NOT_SELECTABLE);
-					   me->SetReactState(REACT_AGGRESSIVE);
-					   if(Player * player = me->SelectNearestPlayer(500.0f))
-						   if(player && player->GetGUID() == m_PlayerGUID)
-							   me->AI()->AttackStart(player);
-					   cinematicPassed = 2;
+					   case 0:
+						   me->MonsterSay("Why can't we fight masters?", LANG_UNIVERSAL, me->GetGUID());
+						   cinematicPassed = 1;
+						   uiCinematicTimer = 5000;
+						   break;
+
+					   case 1:
+						   me->MonsterYell("Well, I'm hungry!", LANG_UNIVERSAL, me->GetGUID());
+						   me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_NOT_SELECTABLE);
+						   me->SetReactState(REACT_AGGRESSIVE);
+						   if(Player * player = me->SelectNearestPlayer(500.0f))
+							   if(player && player->GetGUID() == m_PlayerGUID)
+							   {
+								   me->Attack(player, true);
+								   me->GetMotionMaster()->MoveChase(player);
+							   }
+						   cinematicPassed = 2;
+						   break;
 				   }
 			   }
 			   else
@@ -1676,35 +1719,41 @@ class npc_dm_unholy_pet : public CreatureScript
 
 			   if(uiPhaseChangeTimer <= diff)
 			   {
-				   if(me->GetHealthPct() <= 85 && phase == 1)
-				   { 
-					   me->SetMaxHealth(me->GetMaxHealth()+40000);
-					   me->SetHealth(me->GetMaxHealth()+40000);
-					   me->SetFloatValue(OBJECT_FIELD_SCALE_X, 2);
-					   phase = 2;
-				   }
-				   else if(me->GetHealthPct() <= 65 && phase == 2)
+				   switch(phase)
 				   {
-					   me->SetMaxHealth(me->GetMaxHealth()+40000);
-					   me->SetHealth(me->GetMaxHealth()+40000);
-					   me->SetFloatValue(OBJECT_FIELD_SCALE_X, 2.5);
-					   phase = 3;
-				   }
-				   else if(me->GetHealthPct() <= 35 && phase == 3)
-				   {
-					   me->SetMaxHealth(me->GetMaxHealth()+40000);
-					   me->SetHealth(me->GetMaxHealth()+40000);
-					   me->SetFloatValue(OBJECT_FIELD_SCALE_X, 2.5);
-					   phase = 4;
-				   }
-				   else if(me->GetHealthPct() <= 15 && phase == 4)
-				   {
-					   me->MonsterYell("HUNGER!", LANG_UNIVERSAL, me->GetGUID());
-					   me->SetMaxHealth(me->GetMaxHealth()+40000);
-					   me->SetHealth(me->GetMaxHealth()+40000);
-					   me->SetFloatValue(OBJECT_FIELD_SCALE_X, 3.5);
-					   phase = 5;
-				   }
+					   case 1:
+						   if(HealthBelowPct(85))
+						   {
+							   DoIncreaseHealth(me, 2.0f);
+							   phase = 2;
+						   }
+						   break;
+
+					   case 2:
+						   if(HealthBelowPct(65))
+						   {
+							   DoIncreaseHealth(me, 2.5f);
+							   phase = 3;
+						   }
+						   break;
+
+					   case 3:
+						   if(HealthBelowPct(35))
+						   {
+							   DoIncreaseHealth(me, 3.0f);
+							   phase = 4;
+						   }
+						   break;
+
+					   case 4:
+						   if(HealthBelowPct(15))
+						   {
+							   me->MonsterYell("HUNGER!", LANG_UNIVERSAL, me->GetGUID());
+							   DoIncreaseHealth(me, 3.5f);
+							   phase = 5;
+						   }
+						   break;
+				   }   
 			   }
 			   else
 				   uiPhaseChangeTimer -= diff;
@@ -1739,10 +1788,7 @@ class npc_army_ghoul : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 	   };
 	   CreatureAI * GetAI(Creature * pCreature) const
@@ -1791,11 +1837,7 @@ class npc_dm_rider_guardian : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   summons.DespawnAll();
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me, summons);
 		   }
 
 		   void JustSummoned(Creature * summoned)
@@ -1814,7 +1856,7 @@ class npc_dm_rider_guardian : public CreatureScript
 				   return;
 			   }
 
-			   if(HealthBelowPct(10) && !giveUp)
+			   if(HealthBelowPct(25) && !giveUp)
 			   {
 				   me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NOT_ATTACKABLE_1 | UNIT_FLAG_IMMUNE_TO_PC | UNIT_FLAG_NOT_SELECTABLE);
 				   me->MonsterYell("I.. I GIVE UP!", LANG_UNIVERSAL, me->GetGUID());
@@ -1886,9 +1928,7 @@ class npc_dm_rider_guardian : public CreatureScript
 			   if(InHealingBolt)
 			   {
 				   if(uiHealingBoltWaitTimer <= diff)
-				   {
 					   InHealingBolt = false;
-				   }
 				   else
 					   uiHealingBoltWaitTimer -= diff;
 			   }
@@ -1986,10 +2026,7 @@ class npc_dm_rider_brute : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me);
 		   }
 
 		   void UpdateAI(const uint32 diff)
@@ -2077,7 +2114,6 @@ class npc_dm_dragon_final : public CreatureScript
 		   uint32 uiBreathTimer;
 		   uint32 uiTailWhipTimer;
 		   uint32 uiClawTimer;
-		   //uint32 uiFireballBarrageTimer;
 		   uint32 uiFlameStrikeTimer;
 		   uint32 uiFlightTimer;
 		   uint32 uiFlightWaitTimer;
@@ -2117,12 +2153,7 @@ class npc_dm_dragon_final : public CreatureScript
 		   {
 			   if(who && who->GetTypeId() != TYPEID_PLAYER)
 				   return;
-			   isBattleActive = false;
-			   m_PlayerGUID = NULL;
-			   playerName = "";
-			   m_Phase = PHASE_END;
-			   summons.DespawnAll();
-			   me->DespawnOrUnsummon(1);
+			   DoEndBattle(me, summons);
 		   }
 
 		   void JustDied(Unit * killer)
@@ -2143,6 +2174,7 @@ class npc_dm_dragon_final : public CreatureScript
 				   {
 				       case 1:
 						   me->SetFacingTo(sMoveData[0].o);
+						   me->SetDisableGravity(true);
 						   break;
 				   }
 			   }
@@ -2227,99 +2259,101 @@ class npc_dm_dragon_final : public CreatureScript
 				   {
 					   if(uiFlameStrikeTimer <= diff)
 					   {
-						   if(FlameStrikeData == 0)
+						   switch(FlameStrikeData)
 						   {
-							   me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", me->getVictim()->GetGUID(), true);
-							   groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()+6, me->getVictim()->GetPositionZ(),
-								   me->GetOrientation(), 0, 0, 0, 0, 0);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 1;
-						   }
-						   else if (FlameStrikeData == 1)
-						   {
-							   trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
-								   TEMPSUMMON_TIMED_DESPAWN, 3000);
-							   me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 2;
-						   }
-						   else if (FlameStrikeData == 2)
-						   {
-							   if(groundTarget)
-								   groundTarget->Delete();
-							   me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", me->getVictim()->GetGUID(), true);
-							   groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()-6, me->getVictim()->GetPositionZ(),
-								   me->GetOrientation(), 0, 0, 0, 0, 0);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 3;
-						   }
-						   else if (FlameStrikeData == 3)
-						   {
-							   trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
-								   TEMPSUMMON_TIMED_DESPAWN, 3000);
-							   me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 4;
-						   }
-						   else if (FlameStrikeData == 4)
-						   {
-							   if(groundTarget)
-								   groundTarget->Delete();
-							   me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", me->getVictim()->GetGUID(), true);
-							   groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()-6, me->getVictim()->GetPositionZ(),
-								   me->GetOrientation(), 0, 0, 0, 0, 0);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 5;
-						   }
-						   else if (FlameStrikeData == 5)
-						   {
-							   trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
-								   TEMPSUMMON_TIMED_DESPAWN, 3000);
-							   me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 6;
-						   }
-						   else if (FlameStrikeData == 6)
-						   {
-							   if(groundTarget)
-								   groundTarget->Delete();
-							   me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", me->getVictim()->GetGUID(), true);
-							   groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()+6, me->getVictim()->GetPositionZ(),
-								   me->GetOrientation(), 0, 0, 0, 0, 0);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 7;
-						   }
-						   else if (FlameStrikeData == 7)
-						   {
-							   trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
-								   TEMPSUMMON_TIMED_DESPAWN, 3000);
-							   me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 8;
-						   }
-						   else if (FlameStrikeData == 8)
-						   {
-							   if(groundTarget)
-								   groundTarget->Delete();
-							   me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", me->getVictim()->GetGUID(), true);
-							   groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()+6, me->getVictim()->GetPositionZ(),
-								   me->GetOrientation(), 0, 0, 0, 0, 0);
-							   uiFlameStrikeTimer = 2000;
-							   FlameStrikeData = 9;
-						   }
-						   else if (FlameStrikeData == 9)
-						   {
-							   trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
-								   TEMPSUMMON_TIMED_DESPAWN, 3000);
-							   me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
-							   uiFlameStrikeTimer = 1000;
-							   FlameStrikeData = 10;
-						   }
-						   else if (FlameStrikeData == 10)
-						   {
-							   if(groundTarget)
-								   groundTarget->Delete();
-							   FlameStrikeData = 11;
+						      case 0:
+								  me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", 0, true);
+								  groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()+6, me->getVictim()->GetPositionZ(),
+									  me->GetOrientation(), 0, 0, 0, 0, 0);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 1;
+								  break;
+
+							  case 1:
+								  trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
+									  TEMPSUMMON_TIMED_DESPAWN, 3000);
+								  me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 2;
+								  break;
+
+							  case 2:
+								  if(groundTarget)
+									  groundTarget->Delete();
+								  me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", 0, true);
+								  groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()-6, me->getVictim()->GetPositionZ(),
+									  me->GetOrientation(), 0, 0, 0, 0, 0);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 3;
+								  break;
+
+							  case 3:
+								  trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
+									  TEMPSUMMON_TIMED_DESPAWN, 3000);
+								  me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 4;
+								  break;
+
+							  case 4:
+								  if(groundTarget)
+									  groundTarget->Delete();
+								  me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", 0, true);
+								  groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()-6, me->getVictim()->GetPositionZ(),
+									  me->GetOrientation(), 0, 0, 0, 0, 0);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 5;
+								  break;
+
+							  case 5:
+								  trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
+									  TEMPSUMMON_TIMED_DESPAWN, 3000);
+								  me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 6;
+								  break;
+
+							  case 6:
+								  if(groundTarget)
+									  groundTarget->Delete();
+								  me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", 0, true);
+								  groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()+6, me->getVictim()->GetPositionZ(),
+									  me->GetOrientation(), 0, 0, 0, 0, 0);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 7;
+								  break;
+
+							  case 7:
+								  trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
+									  TEMPSUMMON_TIMED_DESPAWN, 3000);
+								  me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 8;
+								  break;
+
+							  case 8:
+								  if(groundTarget)
+									  groundTarget->Delete();
+								  me->MonsterTextEmote("The Arena Dragon has a lot of fire inside!", 0, true);
+								  groundTarget = me->SummonGameObject(sMoveData[0].gobject, me->getVictim()->GetPositionX()-3, me->getVictim()->GetPositionY()+6, me->getVictim()->GetPositionZ(),
+									  me->GetOrientation(), 0, 0, 0, 0, 0);
+								  uiFlameStrikeTimer = 2000;
+								  FlameStrikeData = 9;
+								  break;
+
+							  case 9:
+								  trigger = me->SummonCreature(NPC_DRAGON_BOSS_TRIGGER, groundTarget->GetPositionX(), groundTarget->GetPositionY(), groundTarget->GetPositionZ(), 0.0f,
+									  TEMPSUMMON_TIMED_DESPAWN, 3000);
+								  me->CastSpell(trigger->GetPositionX(), trigger->GetPositionY(), trigger->GetPositionZ(), sMoveData[0].spellId, true);
+								  uiFlameStrikeTimer = 1000;
+								  FlameStrikeData = 10;
+								  break;
+
+							  case 10:
+								  if(groundTarget)
+									  groundTarget->Delete();
+								  FlameStrikeData = 11;
+								  break;
 						   }
 					   }
 					   else
@@ -2337,8 +2371,10 @@ class npc_dm_dragon_final : public CreatureScript
 					   if(uiLandTimer <= diff && canLand)
 					   {
 						   me->SetCanFly(false);
+						   me->SetDisableGravity(false);
 						   SetCombatMovement(true);
 						   me->GetMotionMaster()->Clear(false);
+						   me->GetMotionMaster()->MoveChase(me->getVictim());
 						   IsInFlight = false;
 						   canLand = false;
 					   }
@@ -2368,7 +2404,16 @@ class remove_non_battle_player : public PlayerScript
 
 	   void OnUpdateZone(Player * player, uint32 zone, uint32 area)
 	   {
-		   if(player->GetZoneId() != DIRE_MAUL_ZONE && player->GetAreaId() != DIRE_MAUL_AREA || player->GetSession()->GetSecurity() > 1)
+		   if(m_PlayerGUID == 0)
+			   return;
+
+		   if(player->GetZoneId() != DIRE_MAUL_ZONE && player->GetAreaId() != DIRE_MAUL_AREA && player->GetGUID() == m_PlayerGUID)
+		   {
+			   inZone = false;
+			   return;
+		   }
+
+		   if(player->GetAreaId() != DIRE_MAUL_AREA || player->GetSession()->GetSecurity() > 1)
 			   return;
 
 		   if(isBattleActive && player->GetGUID() != m_PlayerGUID)
@@ -2377,6 +2422,15 @@ class remove_non_battle_player : public PlayerScript
 			      player->GetStartPosition().GetPositionZ(), player->GetStartPosition().GetOrientation());
 			   ChatHandler(player).SendSysMessage("You cannot be in the Dire Maul Arena while the event is going on!");
 		   }
+	   }
+
+	   void OnLogout(Player * player)
+	   {
+		   if(m_PlayerGUID == 0)
+			   return;
+
+		   if(player->GetGUID() == m_PlayerGUID)
+			   hasLogged = true;
 	   }
 };
 
@@ -2399,6 +2453,7 @@ void AddSC_arena_link_battle()
 	new npc_dm_rider_guardian;
 	new npc_dm_rider_brute;
 	new npc_dm_dragon_final;
+	new npc_dm_wave_portals;
 	/* Player Classes */
 	new remove_non_battle_player;
 }
