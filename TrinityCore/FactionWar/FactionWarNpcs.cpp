@@ -60,13 +60,10 @@ class npc_start_battle : public CreatureScript // You can spawn this NPC anywher
 
 	   bool OnGossipHello(Player * player, Creature * creature)
 	   {
-		   if(factionWar.activeBattle && factionWar._playerGUID != player->GetGUID())
-		   {
+		   if(!factionWar.activeBattle)
+			   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Fight Computer", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
+		   else
 			   player->GetSession()->SendAreaTriggerMessage("A battle is active. You must wait until it ends.");
-			   return false;
-		   }
-
-		   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Fight Computer", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
 		   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Nevermind...", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+2);
 		   player->PlayerTalkClass->SendGossipMenu(1, creature->GetGUID());
 		   return true;
@@ -110,6 +107,7 @@ class npc_start_battle : public CreatureScript // You can spawn this NPC anywher
 			   case GOSSIP_ACTION_INFO_DEF+6:
 				   factionWar.activeBattle = true;
 				   factionWar.unlockedCount = 1;
+				   factionWar.foodCap = 10;
 				   factionWar.baseType = "Astranaar Night Elf";
 				   ChatHandler(player).SendSysMessage("Battle is active! Your battle type is Astranaar vs Splintertree. Go to the commander to start.");
 				   player->PlayerTalkClass->SendCloseGossip();
@@ -135,18 +133,17 @@ class npc_main_commander : public CreatureScript
 
 	   bool OnGossipHello(Player * player, Creature * creature)
 	   {
-		   if(factionWar.activeBattle || factionWar._playerGUID != player->GetGUID())
+		   if(factionWar._playerGUID == player->GetGUID())
 		   {
-			   player->GetSession()->SendAreaTriggerMessage("A battle is active. You must wait until it ends.");
-			   return false;
+			   if(factionWar.activeBattle)
+				   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "I forfeit this game!", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+35);
+			   if(!factionWar.stopSendingUnits && factionWar.activeBattle)
+				   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, "Stop Sending Units..", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+3);
+			   else
+				   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, "Send Units!", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+4);
 		   }
-
-		   if(factionWar.activeBattle)
-			   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "I forfeit this game!", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+35);
-		   if(!factionWar.stopSendingUnits && factionWar.activeBattle)
-			   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, "Stop Sending Units..", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+3);
 		   else
-			   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_BATTLE, "Send Units!", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+4);
+			   player->GetSession()->SendAreaTriggerMessage("You cannot speak to the Commander!");
 		   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Nevermind...", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+2);
 		   player->PlayerTalkClass->SendGossipMenu(1, creature->GetGUID());
 		   return true;
@@ -186,6 +183,7 @@ class npc_main_commander : public CreatureScript
 				   factionWar.unitsKilled = 0;
 				   factionWar.unitsSent = 0;
 				   factionWar._playerGUID = 0;
+				   factionWar.foodCap = 10;
 				   ChatHandler(player).SendSysMessage("Forfeit confirmed. Thanks for playing.");
 				   player->PlayerTalkClass->SendCloseGossip();
 				   break;
@@ -332,16 +330,15 @@ class npc_food_stocker : public CreatureScript
 
 	   bool OnGossipHello(Player * player, Creature * creature)
 	   {
-		   if(factionWar.activeBattle || factionWar._playerGUID != player->GetGUID())
+		   if(factionWar._playerGUID == player->GetGUID())
 		   {
-			   player->GetSession()->SendAreaTriggerMessage("A battle is active. You must wait until it ends.");
-			   return false;
+			   if(factionWar.foodReady)
+				   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_DOT, "Purchase Food", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
+			   else
+				   player->GetSession()->SendAreaTriggerMessage("You're not ready to buy food yet!");
 		   }
-
-		   if(factionWar.foodReady)
-			   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_DOT, "Purchase Food", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+1);
 		   else
-			   player->GetSession()->SendAreaTriggerMessage("You're not ready to buy food yet!");
+			   player->GetSession()->SendAreaTriggerMessage("You cannot speak to the Stocker!");
 		   player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, "Nevermind...", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF+2);
 		   player->PlayerTalkClass->SendGossipMenu(1, creature->GetGUID());
 		   return true;
@@ -391,151 +388,109 @@ class npcs_astranaar : public CreatureScript
 	   {
 		   npcs_astranaarAI(Creature * c) : ScriptedAI(c) { }
 
-		   uint32 waypointTimer;
 		   int moved;
 
 		   void Reset()
 		   {
-			   waypointTimer = 1000;
 			   moved = 0;
 			   me->SetSpeed(MOVE_RUN, 1.0f, true);
 		   }
 
+		   void MovementInform(uint32 type, uint32 id)
+		   {
+			   if (type != POINT_MOTION_TYPE)
+				   return;
+			   moved++;
+		   }
+
 		   void UpdateAI(uint32 const diff)
 		   {
-			   if(me->isInCombat())
-				   return;
-			   else
-				   waypointTimer = 1000; // continue to waypoint
-
-			   if(waypointTimer <= diff)
+			   if(factionWar.activeBattle)
 			   {
 				   switch(moved)
 				   {
 				       case 0:
 				           me->GetMotionMaster()->MovePoint(1, waypoints[22].x, waypoints[22].y, waypoints[22].z);
-						   waypointTimer = 10000;
-						   moved = 1;
 					       break;
 
 				       case 1:
 						   me->GetMotionMaster()->MovePoint(2, waypoints[21].x, waypoints[21].y, waypoints[21].z);
-						   waypointTimer = 30000;
-						   moved = 2;
 						   break;
 
 				       case 2:
 						   me->GetMotionMaster()->MovePoint(3, waypoints[20].x, waypoints[20].y, waypoints[20].z);
-						   waypointTimer = 15000;
-						   moved = 3;
 						   break;
 
 				       case 3:
 						   me->GetMotionMaster()->MovePoint(4, waypoints[19].x, waypoints[19].y, waypoints[19].z);
-						   waypointTimer = 30000;
-						   moved = 4;
 						   break;
 
 				       case 4:
 						   me->GetMotionMaster()->MovePoint(5, waypoints[18].x, waypoints[18].y, waypoints[18].z);
-						   waypointTimer = 13000;
-						   moved = 5;
 						   break;
 
 				       case 5:
 						   me->GetMotionMaster()->MovePoint(6, waypoints[17].x, waypoints[17].y, waypoints[17].z);
-						   waypointTimer = 20000;
-						   moved = 6;
 						   break;
 
 				       case 6:
 						   me->GetMotionMaster()->MovePoint(7, waypoints[16].x, waypoints[16].y, waypoints[16].z);
-						   waypointTimer = 18000;
-						   moved = 7;
 						   break;
 
 				       case 7:
 						   me->GetMotionMaster()->MovePoint(8, waypoints[15].x, waypoints[15].y, waypoints[15].z);
-						   waypointTimer = 35000;
-						   moved = 8;
 						   break;
 
 				       case 8:
 						   me->GetMotionMaster()->MovePoint(9, waypoints[14].x, waypoints[14].y, waypoints[14].z);
-						   waypointTimer = 16000;
-						   moved = 9;
 						   break;
 
 				       case 9:
 						   me->GetMotionMaster()->MovePoint(10, waypoints[13].x, waypoints[13].y, waypoints[13].z);
-						   waypointTimer = 17000;
-						   moved = 10;
 						   break;
 
 				       case 10:
 						   me->GetMotionMaster()->MovePoint(11, waypoints[12].x, waypoints[12].y, waypoints[12].z);
-						   waypointTimer = 18000;
-						   moved = 11;
 						   break;
 
 				       case 11:
 						   me->GetMotionMaster()->MovePoint(12, waypoints[11].x, waypoints[11].y, waypoints[11].z);
-						   waypointTimer = 12000;
-						   moved = 12;
 						   break;
 
 				       case 12:
 						   me->GetMotionMaster()->MovePoint(13, waypoints[10].x, waypoints[10].y, waypoints[10].z);
-						   waypointTimer = 30000;
-						   moved = 13;
 						   break;
 
 				       case 13:
 						   me->GetMotionMaster()->MovePoint(14, waypoints[9].x, waypoints[9].y, waypoints[9].z);
-						   waypointTimer = 14000;
-						   moved = 14;
 						   break;
 
 				       case 14:
 						   me->GetMotionMaster()->MovePoint(15, waypoints[8].x, waypoints[8].y, waypoints[8].z);
-						   waypointTimer = 25000;
-						   moved = 15;
 						   break;
 
 				       case 15:
 						   me->GetMotionMaster()->MovePoint(16, waypoints[7].x, waypoints[7].y, waypoints[7].z);
-						   waypointTimer = 16000;
-						   moved = 16;
 						   break;
 
 				       case 16:
 						   me->GetMotionMaster()->MovePoint(17, waypoints[6].x, waypoints[6].y, waypoints[6].z);
-						   waypointTimer = 18000;
-						   moved = 17;
 						   break;
 
 				       case 17:
 						   me->GetMotionMaster()->MovePoint(18, waypoints[5].x, waypoints[5].y, waypoints[5].z);
-						   waypointTimer = 12000;
-						   moved = 18;
 						   break;
 
 				       case 18:
 						   me->GetMotionMaster()->MovePoint(19, waypoints[4].x, waypoints[4].y, waypoints[4].z);
-						   waypointTimer = 12000;
-						   moved = 19;
 						   break;
 
 				       case 19:
 						   me->GetMotionMaster()->MovePoint(20, waypoints[3].x, waypoints[3].y, waypoints[3].z);
-						   waypointTimer = 9000;
-						   moved = 20;
 						   break;
 
 				       case 20:
 						   me->GetMotionMaster()->MovePoint(21, waypoints[2].x, waypoints[2].y, waypoints[2].z);
-						   waypointTimer = 8000;
-						   moved = 21;
 						   break;
 
 				       case 21:
@@ -543,10 +498,7 @@ class npcs_astranaar : public CreatureScript
 						   moved = 22;
 						   break;
 				   }
-				   waypointTimer = 35000;
 			   }
-			   else
-				   waypointTimer -= diff;   
 			   DoMeleeAttackIfReady();
 		   }
 		   
@@ -577,154 +529,113 @@ class npcs_splintertree : public CreatureScript
 			   me->SetSpeed(MOVE_RUN, 1.0f, true);
 		   }
 
+		   void MovementInform(uint32 type, uint32 id)
+		   {
+			   if (type != POINT_MOTION_TYPE)
+				   return;
+			   moved++;
+		   }
+
 		   void UpdateAI(uint32 const diff)
 		   {
-			   if(me->isInCombat())
-				   return;
-			   else
-				   waypointTimer = 1000; // continue to waypoint
-			   if(waypointTimer <= diff)
+			   if(!factionWar.activeBattle)
+				   waypointTimer = 1000;
+
+			   if(factionWar.activeBattle)
 			   {
 				   switch(moved)
 				   {
 				       case 0:
 				           me->GetMotionMaster()->MovePoint(1, waypoints[1].x, waypoints[1].y, waypoints[1].z);
-						   waypointTimer = 8000;
-						   moved = 1;
 					       break;
 
 				       case 1:
 						   me->GetMotionMaster()->MovePoint(2, waypoints[2].x, waypoints[2].y, waypoints[2].z);
-						   waypointTimer = 9000;
-						   moved = 2;
 						   break;
 
 				       case 2:
 						   me->GetMotionMaster()->MovePoint(3, waypoints[3].x, waypoints[3].y, waypoints[3].z);
-						   waypointTimer = 12000;
-						   moved = 3;
 						   break;
 
 				       case 3:
 						   me->GetMotionMaster()->MovePoint(4, waypoints[4].x, waypoints[4].y, waypoints[4].z);
-						   waypointTimer = 12000;
-						   moved = 4;
 						   break;
 
 				       case 4:
 						   me->GetMotionMaster()->MovePoint(5, waypoints[5].x, waypoints[5].y, waypoints[5].z);
-						   waypointTimer = 18000;
-						   moved = 5;
 						   break;
 
 				       case 5:
 						   me->GetMotionMaster()->MovePoint(6, waypoints[6].x, waypoints[6].y, waypoints[6].z);
-						   waypointTimer = 16000;
-						   moved = 6;
 						   break;
 
 				       case 6:
 						   me->GetMotionMaster()->MovePoint(7, waypoints[7].x, waypoints[7].y, waypoints[7].z);
-						   waypointTimer = 25000;
-						   moved = 7;
 						   break;
 
 				       case 7:
 						   me->GetMotionMaster()->MovePoint(8, waypoints[8].x, waypoints[8].y, waypoints[8].z);
-						   waypointTimer = 14000;
-						   moved = 8;
 						   break;
 
 				       case 8:
 						   me->GetMotionMaster()->MovePoint(9, waypoints[9].x, waypoints[9].y, waypoints[9].z);
-						   waypointTimer = 30000;
-						   moved = 9;
 						   break;
 
 				       case 9:
 						   me->GetMotionMaster()->MovePoint(10, waypoints[10].x, waypoints[10].y, waypoints[10].z);
-						   waypointTimer = 12000;
-						   moved = 10;
 						   break;
 
 				       case 10:
 						   me->GetMotionMaster()->MovePoint(11, waypoints[11].x, waypoints[11].y, waypoints[11].z);
-						   waypointTimer = 18000;
-						   moved = 11;
 						   break;
 
 				       case 11:
 						   me->GetMotionMaster()->MovePoint(12, waypoints[12].x, waypoints[12].y, waypoints[12].z);
-						   waypointTimer = 17000;
-						   moved = 12;
 						   break;
 
 				       case 12:
 						   me->GetMotionMaster()->MovePoint(13, waypoints[13].x, waypoints[13].y, waypoints[13].z);
-						   waypointTimer = 16000;
-						   moved = 13;
 						   break;
 
 				       case 13:
 						   me->GetMotionMaster()->MovePoint(14, waypoints[14].x, waypoints[14].y, waypoints[14].z);
-						   waypointTimer = 35000;
-						   moved = 14;
 						   break;
 
 				       case 14:
 						   me->GetMotionMaster()->MovePoint(15, waypoints[15].x, waypoints[15].y, waypoints[15].z);
-						   waypointTimer = 18000;
-						   moved = 15;
 						   break;
 
 				       case 15:
 						   me->GetMotionMaster()->MovePoint(16, waypoints[16].x, waypoints[16].y, waypoints[16].z);
-						   waypointTimer = 20000;
-						   moved = 16;
 						   break;
 
 				       case 16:
 						   me->GetMotionMaster()->MovePoint(17, waypoints[17].x, waypoints[17].y, waypoints[17].z);
-						   waypointTimer = 13000;
-						   moved = 17;
 						   break;
 
 				       case 17:
 						   me->GetMotionMaster()->MovePoint(18, waypoints[18].x, waypoints[18].y, waypoints[18].z);
-						   waypointTimer = 15000;
-						   moved = 18;
 						   break;
 
 				       case 18:
 						   me->GetMotionMaster()->MovePoint(19, waypoints[19].x, waypoints[19].y, waypoints[19].z);
-						   waypointTimer = 25000;
-						   moved = 19;
 						   break;
 
 				       case 19:
 						   me->GetMotionMaster()->MovePoint(20, waypoints[20].x, waypoints[20].y, waypoints[20].z);
-						   waypointTimer = 10000;
-						   moved = 20;
 						   break;
 
 				       case 20:
 						   me->GetMotionMaster()->MovePoint(21, waypoints[21].x, waypoints[21].y, waypoints[21].z);
-						   waypointTimer = 15000;
-						   moved = 21;
 						   break;
 
 				       case 21:
 						   me->GetMotionMaster()->MovePoint(22, waypoints[22].x, waypoints[22].y, waypoints[22].z);
-						   moved = 22;
 						   break;
 				   }
-				   waypointTimer = 35000;
 			   }
-			   else
-				   waypointTimer -= diff;   
 			   DoMeleeAttackIfReady();
 		   }
-		   
 	   };
 	   
 	   CreatureAI * GetAI(Creature * pCreature) const
@@ -741,4 +652,5 @@ void AddSC_faction_wars()
 	new npc_upgrade_dealer();
 	new npc_food_stocker();
 	new npcs_astranaar();
+	new npcs_splintertree();
 }
